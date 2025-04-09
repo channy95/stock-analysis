@@ -1,0 +1,2216 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>미국 시장 지표 분석기</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- 지연 로딩을 위한 defer 속성 적용 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.1.1/dist/chartjs-chart-matrix.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1/build/global/luxon.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0/dist/chartjs-adapter-luxon.min.js" defer></script>
+    <link href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .chart-container {
+            position: relative;
+            margin: auto;
+            height: 400px;
+            width: 100%;
+            margin-bottom: 30px;
+            display: none;
+        }
+        .matrix-container {
+            position: relative;
+            margin: auto;
+            height: 500px;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 30px;
+            display: none;
+        }
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            flex-direction: column;
+        }
+        .loader {
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .shadow-custom {
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+        }
+        .tooltip-container {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip-text {
+            visibility: hidden;
+            width: 240px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -120px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip-container:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        #autocompleteResults {
+            position: absolute;
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 0 0 0.375rem 0.375rem;
+            z-index: 10;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .autocomplete-item {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+        }
+        .autocomplete-item:hover {
+            background-color: #f7fafc;
+        }
+        .selected-stock {
+            display: flex;
+            align-items: center;
+            background-color: #e6f7ff;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            margin-bottom: 0.5rem;
+        }
+        .remove-stock {
+            margin-left: 0.5rem;
+            color: #f56565;
+            cursor: pointer;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tab-button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            margin-right: 0.5rem;
+            transition: background-color 0.2s;
+        }
+        .tab-button.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+            height: 20px;
+            margin-bottom: 8px;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s, transform 0.3s;
+            max-width: 300px;
+        }
+        
+        .notification.success {
+            background-color: #48bb78;
+        }
+        
+        .notification.error {
+            background-color: #f56565;
+        }
+        
+        .notification.warning {
+            background-color: #ed8936;
+        }
+        
+        .notification.info {
+            background-color: #4299e1;
+        }
+        
+        .notification.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .price-change-up {
+            color: #48bb78;
+        }
+        
+        .price-change-down {
+            color: #f56565;
+        }
+        
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 300px;
+            }
+            .matrix-container {
+                height: 400px;
+                width: 100%;
+            }
+            h1.text-3xl {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="loading" id="loadingIndicator" style="display: none;">
+        <div class="loader"></div>
+        <p class="text-lg" id="loadingText">데이터를 불러오는 중입니다...</p>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <div class="container mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-6 text-blue-800">미국 시장 지표 분석기</h1>
+        <div class="text-center mb-4 text-gray-600">
+            <p>미국 주식 시장과 경제 지표 간의 상관관계를 분석할 수 있는 도구입니다.</p>
+            <p class="mt-2 text-sm">금융 데이터 API를 통해 필요한 데이터만 불러와 분석합니다.</p>
+        </div>
+
+        <!-- 주식 검색 섹션 -->
+        <div class="bg-white rounded-lg shadow-custom p-5 mb-5">
+            <h2 class="text-xl font-semibold mb-3">NYSE/NASDAQ 상장 주식 검색</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        기업명 또는 티커 심볼로 검색
+                        <span class="tooltip-container ml-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="tooltip-text">미국 주식시장에 상장된 기업을 검색하여 분석에 추가할 수 있습니다. 예: Apple, AAPL, Microsoft, MSFT 등</span>
+                        </span>
+                    </label>
+                    <div class="relative">
+                        <input type="text" id="stockSearch" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: Apple, AAPL, Microsoft, MSFT">
+                        <div id="autocompleteResults" class="hidden"></div>
+                    </div>
+                    <button id="searchButton" class="mt-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-200">
+                        검색
+                    </button>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">선택된 개별 주식</label>
+                    <div id="selectedStocks" class="min-h-[100px] p-2 border border-gray-300 rounded-md bg-gray-50">
+                        <p id="noStocksMessage" class="text-gray-500 text-sm">아직 선택된 주식이 없습니다. 왼쪽에서 주식을 검색하여 추가해주세요.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="stockInfo" class="mt-4 p-4 border border-gray-200 rounded-md bg-gray-50 hidden">
+                <!-- 주식 정보가 여기에 표시됩니다 -->
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-custom p-5 mb-5">
+            <h2 class="text-xl font-semibold mb-3">분석 설정</h2>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">분석 기간 선택</label>
+                    <div class="flex space-x-4">
+                        <select id="period" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="1m">1개월</option>
+                            <option value="3m">3개월</option>
+                            <option value="6m">6개월</option>
+                            <option value="1y" selected>1년</option>
+                            <option value="2y">2년</option>
+                            <option value="5y">5년</option>
+                            <option value="10y">10년</option>
+                            <option value="max">최대</option>
+                        </select>
+                    </div>
+
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">시작 날짜 - 종료 날짜 직접 설정</label>
+                        <div class="flex space-x-2">
+                            <input type="date" id="startDate" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="date" id="endDate" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">실시간 업데이트</label>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="realTimeUpdate" class="h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="realTimeUpdate" class="ml-2 text-sm text-gray-700">데이터 자동 업데이트 (15분마다)</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">가격 변동 알림</label>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="priceAlerts" class="h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="priceAlerts" class="ml-2 text-sm text-gray-700">중요 변동 시 알림 활성화</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        분석 지표 선택
+                        <span class="tooltip-container ml-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="tooltip-text">최소 2개, 최대 8개의 지표를 선택하세요. 다양한 지표를 분석하여 시장 간의 관계를 파악할 수 있습니다.</span>
+                        </span>
+                    </label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="sp500" value="^GSPC" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500" checked>
+                            <label for="sp500" class="ml-2 text-sm text-gray-700">S&P 500</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="nasdaq" value="^IXIC" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500" checked>
+                            <label for="nasdaq" class="ml-2 text-sm text-gray-700">나스닥</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="dowjones" value="^DJI" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="dowjones" class="ml-2 text-sm text-gray-700">다우존스</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="russell" value="^RUT" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="russell" class="ml-2 text-sm text-gray-700">러셀 2000</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="treasury10y" value="^TNX" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500" checked>
+                            <label for="treasury10y" class="ml-2 text-sm text-gray-700">미국 10년물 국채</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="treasury2y" value="^IRX" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="treasury2y" class="ml-2 text-sm text-gray-700">미국 2년물 국채</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="gold" value="GC=F" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="gold" class="ml-2 text-sm text-gray-700">금</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="oil" value="CL=F" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="oil" class="ml-2 text-sm text-gray-700">WTI 원유</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="vix" value="^VIX" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="vix" class="ml-2 text-sm text-gray-700">VIX 변동성 지수</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="dollar" value="DX-Y.NYB" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="dollar" class="ml-2 text-sm text-gray-700">달러 인덱스</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="bitcoin" value="BTC-USD" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="bitcoin" class="ml-2 text-sm text-gray-700">비트코인</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="realestate" value="IYR" class="indicator-checkbox h-4 w-4 text-blue-600 focus:ring-blue-500">
+                            <label for="realestate" class="ml-2 text-sm text-gray-700">부동산 ETF</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-center">
+                <button id="analyzeButton" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-md transition duration-200 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    분석 시작
+                </button>
+            </div>
+        </div>
+
+        <div id="resultsSection" style="display: none;">
+            <!-- 실시간 시세 섹션 -->
+            <div class="bg-white rounded-lg shadow-custom p-5 mb-5" id="liveQuoteSection">
+                <h2 class="text-xl font-semibold mb-3">실시간 시세</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-white">
+                        <thead>
+                            <tr>
+                                <th class="py-2 px-4 border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">종목</th>
+                                <th class="py-2 px-4 border-b border-gray-200 bg-gray-50 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">현재가</th>
+                                <th class="py-2 px-4 border-b border-gray-200 bg-gray-50 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">변동</th>
+                                <th class="py-2 px-4 border-b border-gray-200 bg-gray-50 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">변동률</th>
+                                <th class="py-2 px-4 border-b border-gray-200 bg-gray-50 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">최저/최고</th>
+                                <th class="py-2 px-4 border-b border-gray-200 bg-gray-50 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">거래량</th>
+                            </tr>
+                        </thead>
+                        <tbody id="liveQuotesTableBody">
+                            <!-- 실시간 시세가 여기에 들어갑니다 -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-right text-xs text-gray-500 mt-2">
+                    <span id="lastUpdated"></span>
+                </div>
+            </div>
+
+            <!-- 탭 네비게이션 -->
+            <div class="bg-white rounded-lg shadow-custom p-5 mb-5">
+                <div class="mb-4 border-b">
+                    <ul class="flex flex-wrap -mb-px" id="resultTabs">
+                        <li class="mr-2">
+                            <button class="tab-button active" data-tab="priceTab">가격 추이</button>
+                        </li>
+                        <li class="mr-2">
+                            <button class="tab-button" data-tab="patternTab">패턴 분석</button>
+                        </li>
+                        <li class="mr-2">
+                            <button class="tab-button" data-tab="correlationTab">상관관계</button>
+                        </li>
+                        <li class="mr-2">
+                            <button class="tab-button" data-tab="returnsTab">변화율 분석</button>
+                        </li>
+                        <li class="mr-2">
+                            <button class="tab-button" data-tab="scatterTab">산점도</button>
+                        </li>
+                        <li>
+                            <button class="tab-button" data-tab="summaryTab">요약</button>
+                        </li>
+                    </ul>
+                </div>
+                
+                <!-- 탭 콘텐츠 영역 -->
+                <div id="tabContents">
+                    <!-- 가격 추이 탭 -->
+                    <div id="priceTab" class="tab-content active">
+                        <h2 class="text-xl font-semibold mb-3">가격 추이 분석</h2>
+                        <div class="mb-4">
+                            <div class="flex space-x-4 mb-4">
+                                <button id="rawPriceBtn" class="bg-blue-600 text-white px-3 py-1 rounded-md text-sm">실제 가격</button>
+                                <button id="normalizedPriceBtn" class="bg-gray-200 text-gray-700 px-3 py-1 rounded-md text-sm">정규화 가격</button>
+                            </div>
+                            <div class="chart-container" style="display: block;">
+                                <canvas id="priceChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 패턴 분석 탭 -->
+                    <div id="patternTab" class="tab-content">
+                        <h2 class="text-xl font-semibold mb-3">주가 패턴 분석</h2>
+                        <div class="mb-4">
+                            <p class="text-gray-700 mb-3">이동평균선을 통한 주가 트렌드 분석</p>
+                            <div class="flex space-x-4 mb-4">
+                                <select id="patternStock" class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <!-- 종목 옵션이 여기에 동적으로 채워집니다 -->
+                                </select>
+                                <button id="showPatternBtn" class="bg-blue-600 text-white px-3 py-1 rounded-md text-sm">패턴 분석</button>
+                            </div>
+                            <div class="chart-container" style="display: block;">
+                                <canvas id="patternChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 상관관계 탭 -->
+                    <div id="correlationTab" class="tab-content">
+                        <h2 class="text-xl font-semibold mb-3">상관관계 분석</h2>
+                        <div class="md:flex flex-wrap">
+                            <div class="md:w-full lg:w-1/2 mb-5">
+                                <div class="matrix-container mx-auto" style="display: block;">
+                                    <canvas id="correlationMatrix"></canvas>
+                                </div>
+                            </div>
+                            <div class="md:w-full lg:w-1/2 pl-0 lg:pl-5">
+                                <h3 class="text-lg font-medium mb-2">상관관계 해석</h3>
+                                <p class="text-gray-700 mb-4">
+                                    상관계수는 -1에서 1 사이의 값으로, 두 지표 간의 관계를 나타냅니다:
+                                </p>
+                                <ul class="list-disc ml-6 text-gray-700 mb-4">
+                                    <li class="mb-2"><span class="text-red-600 font-medium">강한 양의 상관관계(0.7~1.0)</span>: 한 지표가 상승할 때 다른 지표도 강하게 상승</li>
+                                    <li class="mb-2"><span class="text-orange-500 font-medium">중간 양의 상관관계(0.3~0.7)</span>: 한 지표가 상승할 때 다른 지표도 어느 정도 상승</li>
+                                    <li class="mb-2"><span class="text-gray-500 font-medium">약한 상관관계(-0.3~0.3)</span>: 두 지표 간 관계가 약함</li>
+                                    <li class="mb-2"><span class="text-blue-500 font-medium">중간 음의 상관관계(-0.7~-0.3)</span>: 한 지표가 상승할 때 다른 지표는 어느 정도 하락</li>
+                                    <li><span class="text-purple-600 font-medium">강한 음의 상관관계(-1.0~-0.7)</span>: 한 지표가 상승할 때 다른 지표는 강하게 하락</li>
+                                </ul>
+                                <p class="text-gray-700">
+                                    상관관계는 인과관계를 의미하지 않습니다. 두 지표가 높은 상관관계를 보이더라도 서로 직접적인 영향을 주는 것은 아닐 수 있습니다.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 변화율 분석 탭 -->
+                    <div id="returnsTab" class="tab-content">
+                        <h2 class="text-xl font-semibold mb-3">일별 변화율 분석</h2>
+                        <div class="chart-container" style="display: block;">
+                            <canvas id="returnsChart"></canvas>
+                        </div>
+                        <div class="chart-container mt-8" style="display: block;">
+                            <canvas id="returnsDistributionChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- 산점도 탭 -->
+                    <div id="scatterTab" class="tab-content">
+                        <h2 class="text-xl font-semibold mb-3">산점도 분석</h2>
+                        <div class="mb-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="xAxisSelect" class="block text-sm font-medium text-gray-700 mb-2">X축 지표</label>
+                                    <select id="xAxisSelect" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="yAxisSelect" class="block text-sm font-medium text-gray-700 mb-2">Y축 지표</label>
+                                    <select id="yAxisSelect" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-container" style="display: block;">
+                            <canvas id="scatterChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- 요약 탭 -->
+                    <div id="summaryTab" class="tab-content">
+                        <h2 class="text-xl font-semibold mb-3">분석 결과 요약</h2>
+                        <div id="summarySection" class="text-gray-700">
+                            <!-- 로딩 중 스켈레톤 효과 -->
+                            <div class="skeleton w-full h-6 mb-2"></div>
+                            <div class="skeleton w-3/4 h-6 mb-2"></div>
+                            <div class="skeleton w-full h-6 mb-4"></div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div class="skeleton h-24 w-full"></div>
+                                <div class="skeleton h-24 w-full"></div>
+                            </div>
+                            
+                            <div class="skeleton w-full h-6 mb-2"></div>
+                            <div class="skeleton w-5/6 h-6 mb-2"></div>
+                            <div class="skeleton w-full h-6 mb-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center text-gray-500 text-sm py-4">
+            <p>© 2025 미국 시장 지표 분석기 | 데이터 출처: Alpha Vantage, Polygon.io, Yahoo Finance</p>
+            <p class="mt-1">본 분석 도구는 투자 권유나 조언을 제공하지 않습니다. 투자 결정 시 전문가와 상담하세요.</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // =================== 전역 변수와 캐시 ===================
+            // 데이터 캐시 시스템 (IndexedDB 사용)
+            const indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
+            let db;
+            
+            // IndexedDB 초기화
+            function initDb() {
+                const request = indexedDB.open('StockDataCache', 1);
+                
+                request.onerror = function(event) {
+                    console.error('IndexedDB 에러:', event.target.error);
+                    showNotification('데이터 캐싱 시스템 초기화에 실패했습니다. 브라우저 캐시를 사용합니다.', 'warning');
+                    
+                    // IndexedDB가 실패하면 메모리 캐시를 사용
+                    db = null;
+                };
+                
+                request.onupgradeneeded = function(event) {
+                    const db = event.target.result;
+                    
+                    // 주식 데이터 저장소 생성
+                    if (!db.objectStoreNames.contains('stockData')) {
+                        const objectStore = db.createObjectStore('stockData', { keyPath: 'id' });
+                        objectStore.createIndex('symbol', 'symbol', { unique: false });
+                        objectStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    }
+                    
+                    // 종목 목록 저장소 생성
+                    if (!db.objectStoreNames.contains('symbols')) {
+                        db.createObjectStore('symbols', { keyPath: 'id' });
+                    }
+                };
+                
+                request.onsuccess = function(event) {
+                    db = event.target.result;
+                    console.log('IndexedDB 연결 성공');
+                    
+                    // 종목 목록 확인 및 로드
+                    loadStockSymbols();
+                };
+            }
+            
+            // 데이터 캐시 함수
+            const dataCache = {
+                // 데이터 저장
+                set: function(symbol, startDate, endDate, data) {
+                    const cacheKey = this.createKey(symbol, startDate, endDate);
+                    
+                    if (db) {
+                        const transaction = db.transaction(['stockData'], 'readwrite');
+                        const objectStore = transaction.objectStore('stockData');
+                        
+                        objectStore.put({
+                            id: cacheKey,
+                            symbol: symbol,
+                            startDate: startDate,
+                            endDate: endDate,
+                            data: data,
+                            timestamp: Date.now()
+                        });
+                    } else {
+                        // 메모리 캐시 사용 (sessionStorage)
+                        try {
+                            sessionStorage.setItem(cacheKey, JSON.stringify({
+                                data: data,
+                                timestamp: Date.now()
+                            }));
+                        } catch (e) {
+                            console.error('세션 스토리지에 데이터 저장 실패:', e);
+                        }
+                    }
+                },
+                
+                // 데이터 조회
+                get: async function(symbol, startDate, endDate) {
+                    const cacheKey = this.createKey(symbol, startDate, endDate);
+                    
+                    if (db) {
+                        return new Promise((resolve, reject) => {
+                            const transaction = db.transaction(['stockData'], 'readonly');
+                            const objectStore = transaction.objectStore('stockData');
+                            const request = objectStore.get(cacheKey);
+                            
+                            request.onerror = function(event) {
+                                reject(null);
+                            };
+                            
+                            request.onsuccess = function(event) {
+                                if (!request.result) {
+                                    resolve(null);
+                                    return;
+                                }
+                                
+                                // 캐시 만료 체크 (24시간)
+                                const cacheEntry = request.result;
+                                if (Date.now() - cacheEntry.timestamp > 86400000) {
+                                    // 만료된 항목 삭제
+                                    const deleteTransaction = db.transaction(['stockData'], 'readwrite');
+                                    const deleteStore = deleteTransaction.objectStore('stockData');
+                                    deleteStore.delete(cacheKey);
+                                    resolve(null);
+                                } else {
+                                    resolve(cacheEntry.data);
+                                }
+                            };
+                        });
+                    } else {
+                        // 메모리 캐시 사용 (sessionStorage)
+                        try {
+                            const cached = sessionStorage.getItem(cacheKey);
+                            if (!cached) return null;
+                            
+                            const cacheEntry = JSON.parse(cached);
+                            
+                            // 캐시 만료 체크 (24시간)
+                            if (Date.now() - cacheEntry.timestamp > 86400000) {
+                                sessionStorage.removeItem(cacheKey);
+                                return null;
+                            }
+                            
+                            return cacheEntry.data;
+                        } catch (e) {
+                            console.error('세션 스토리지에서 데이터 조회 실패:', e);
+                            return null;
+                        }
+                    }
+                },
+                
+                // 캐시 키 생성
+                createKey: function(symbol, startDate, endDate) {
+                    return `${symbol}_${startDate}_${endDate}`;
+                },
+                
+                // 캐시 전체 삭제
+                clear: function() {
+                    if (db) {
+                        const transaction = db.transaction(['stockData'], 'readwrite');
+                        const objectStore = transaction.objectStore('stockData');
+                        objectStore.clear();
+                    } else {
+                        // sessionStorage 사용 시 관련 항목만 삭제
+                        Object.keys(sessionStorage).forEach(key => {
+                            if (key.includes('_')) {
+                                sessionStorage.removeItem(key);
+                            }
+                        });
+                    }
+                }
+            };
+            
+            // 종목 목록 데이터
+            let allStockSymbols = [];
+            
+            // 종목 목록 로드 함수
+            async function loadStockSymbols() {
+                if (db) {
+                    const transaction = db.transaction(['symbols'], 'readonly');
+                    const objectStore = transaction.objectStore('symbols');
+                    const request = objectStore.get('all_symbols');
+                    
+                    request.onsuccess = function(event) {
+                        if (request.result && Date.now() - request.result.timestamp < 604800000) { // 1주일 캐시
+                            allStockSymbols = request.result.data;
+                            console.log('캐시에서 종목 목록을 불러왔습니다. 총', allStockSymbols.length, '개');
+                        } else {
+                            // 캐시되지 않았거나 만료됨, API에서 로드
+                            fetchStockSymbols();
+                        }
+                    };
+                    
+                    request.onerror = function(event) {
+                        console.error('종목 목록 조회 오류:', event.target.error);
+                        fetchStockSymbols();
+                    };
+                } else {
+                    try {
+                        const cached = localStorage.getItem('all_stock_symbols');
+                        if (cached) {
+                            const data = JSON.parse(cached);
+                            if (Date.now() - data.timestamp < 604800000) { // 1주일 캐시
+                                allStockSymbols = data.symbols;
+                                console.log('로컬 스토리지에서 종목 목록을 불러왔습니다. 총', allStockSymbols.length, '개');
+                                return;
+                            }
+                        }
+                        fetchStockSymbols();
+                    } catch (e) {
+                        console.error('로컬 스토리지에서 종목 목록 조회 오류:', e);
+                        fetchStockSymbols();
+                    }
+                }
+            }
+            
+            // API에서 종목 목록 가져오기
+            async function fetchStockSymbols() {
+                // 메모리 사용량 최적화를 위해 기본 종목 목록만 사용
+                const basicSymbols = [
+                    { symbol: 'AAPL', name: 'Apple Inc.', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'MSFT', name: 'Microsoft Corporation', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'AMZN', name: 'Amazon.com Inc.', sector: '소비자 서비스', exchange: 'NASDAQ' },
+                    { symbol: 'GOOGL', name: 'Alphabet Inc. Class A', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'GOOG', name: 'Alphabet Inc. Class C', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'META', name: 'Meta Platforms Inc.', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'TSLA', name: 'Tesla Inc.', sector: '자동차', exchange: 'NASDAQ' },
+                    { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'BRK.A', name: 'Berkshire Hathaway Inc. Class A', sector: '금융', exchange: 'NYSE' },
+                    { symbol: 'BRK.B', name: 'Berkshire Hathaway Inc. Class B', sector: '금융', exchange: 'NYSE' },
+                    { symbol: 'JPM', name: 'JPMorgan Chase & Co.', sector: '금융', exchange: 'NYSE' },
+                    { symbol: 'JNJ', name: 'Johnson & Johnson', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'V', name: 'Visa Inc.', sector: '금융', exchange: 'NYSE' },
+                    { symbol: 'PG', name: 'Procter & Gamble Co.', sector: '소비재', exchange: 'NYSE' },
+                    { symbol: 'UNH', name: 'UnitedHealth Group Inc.', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'MA', name: 'Mastercard Inc.', sector: '금융', exchange: 'NYSE' },
+                    { symbol: 'HD', name: 'Home Depot Inc.', sector: '소매', exchange: 'NYSE' },
+                    { symbol: 'BAC', name: 'Bank of America Corp.', sector: '금융', exchange: 'NYSE' },
+                    { symbol: 'XOM', name: 'Exxon Mobil Corporation', sector: '에너지', exchange: 'NYSE' },
+                    { symbol: 'ABBV', name: 'AbbVie Inc.', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'PFE', name: 'Pfizer Inc.', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'AVGO', name: 'Broadcom Inc.', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'CVX', name: 'Chevron Corporation', sector: '에너지', exchange: 'NYSE' },
+                    { symbol: 'LLY', name: 'Eli Lilly and Company', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'CSCO', name: 'Cisco Systems Inc.', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'PEP', name: 'PepsiCo Inc.', sector: '소비재', exchange: 'NASDAQ' },
+                    { symbol: 'TMO', name: 'Thermo Fisher Scientific Inc.', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'COST', name: 'Costco Wholesale Corporation', sector: '소매', exchange: 'NASDAQ' },
+                    { symbol: 'ABT', name: 'Abbott Laboratories', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'MRK', name: 'Merck & Co. Inc.', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'WMT', name: 'Walmart Inc.', sector: '소매', exchange: 'NYSE' },
+                    { symbol: 'DIS', name: 'The Walt Disney Company', sector: '미디어', exchange: 'NYSE' },
+                    { symbol: 'KO', name: 'The Coca-Cola Company', sector: '소비재', exchange: 'NYSE' },
+                    { symbol: 'ACN', name: 'Accenture plc', sector: '기술', exchange: 'NYSE' },
+                    { symbol: 'ADBE', name: 'Adobe Inc.', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'CRM', name: 'Salesforce Inc.', sector: '기술', exchange: 'NYSE' },
+                    { symbol: 'NKE', name: 'Nike Inc.', sector: '소비재', exchange: 'NYSE' },
+                    { symbol: 'TXN', name: 'Texas Instruments Incorporated', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'DHR', name: 'Danaher Corporation', sector: '헬스케어', exchange: 'NYSE' },
+                    { symbol: 'AMD', name: 'Advanced Micro Devices Inc.', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'NEE', name: 'NextEra Energy Inc.', sector: '유틸리티', exchange: 'NYSE' },
+                    { symbol: 'PM', name: 'Philip Morris International Inc.', sector: '소비재', exchange: 'NYSE' },
+                    { symbol: 'T', name: 'AT&T Inc.', sector: '통신', exchange: 'NYSE' },
+                    { symbol: 'INTC', name: 'Intel Corporation', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'CMCSA', name: 'Comcast Corporation', sector: '미디어', exchange: 'NASDAQ' },
+                    { symbol: 'VZ', name: 'Verizon Communications Inc.', sector: '통신', exchange: 'NYSE' },
+                    { symbol: 'NFLX', name: 'Netflix Inc.', sector: '미디어', exchange: 'NASDAQ' },
+                    { symbol: 'QCOM', name: 'QUALCOMM Incorporated', sector: '기술', exchange: 'NASDAQ' },
+                    { symbol: 'IBM', name: 'International Business Machines Corporation', sector: '기술', exchange: 'NYSE' },
+                    { symbol: 'BA', name: 'The Boeing Company', sector: '산업재', exchange: 'NYSE' },
+                    // ETF 추가
+                    { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', sector: 'ETF', exchange: 'NYSE Arca' },
+                    { symbol: 'QQQ', name: 'Invesco QQQ Trust Series 1', sector: 'ETF', exchange: 'NASDAQ' },
+                    { symbol: 'IWM', name: 'iShares Russell 2000 ETF', sector: 'ETF', exchange: 'NYSE Arca' },
+                    { symbol: 'GLD', name: 'SPDR Gold Shares', sector: 'ETF', exchange: 'NYSE Arca' },
+                    { symbol: 'SLV', name: 'iShares Silver Trust', sector: 'ETF', exchange: 'NYSE Arca' },
+                    { symbol: 'USO', name: 'United States Oil Fund', sector: 'ETF', exchange: 'NYSE Arca' },
+                    { symbol: 'VTI', name: 'Vanguard Total Stock Market ETF', sector: 'ETF', exchange: 'NYSE Arca' },
+                    { symbol: 'XLF', name: 'Financial Select Sector SPDR Fund', sector: 'ETF', exchange: 'NYSE Arca' },
+                    { symbol: 'XLK', name: 'Technology Select Sector SPDR Fund', sector: 'ETF', exchange: 'NYSE Arca' },
+                    { symbol: 'XLE', name: 'Energy Select Sector SPDR Fund', sector: 'ETF', exchange: 'NYSE Arca' }
+                ];
+                
+                try {
+                    // 실제 구현에서는 여기서 API 호출을 통해 전체 종목 목록을 가져오기
+                    // 현재는 샘플 데이터만 사용
+                    allStockSymbols = basicSymbols;
+                    
+                    // 캐시에 저장
+                    if (db) {
+                        const transaction = db.transaction(['symbols'], 'readwrite');
+                        const objectStore = transaction.objectStore('symbols');
+                        objectStore.put({
+                            id: 'all_symbols',
+                            data: allStockSymbols,
+                            timestamp: Date.now()
+                        });
+                    } else {
+                        localStorage.setItem('all_stock_symbols', JSON.stringify({
+                            symbols: allStockSymbols,
+                            timestamp: Date.now()
+                        }));
+                    }
+                    
+                    console.log('종목 목록을 불러왔습니다. 총', allStockSymbols.length, '개');
+                } catch (error) {
+                    console.error('종목 목록을 가져오는 중 오류 발생:', error);
+                    showNotification('종목 목록을 불러오는데 실패했습니다. 기본 종목만 사용합니다.', 'error');
+                    allStockSymbols = basicSymbols;
+                }
+            }
+            
+            // 분석 데이터 저장
+            let allData = {};
+            
+            // 실시간 업데이트를 위한 타이머
+            let updateTimer = null;
+            
+            // 가격 변동 알림을 위한 이전 값 저장
+            let previousPrices = {};
+            
+            // 지표 색상과 이름 매핑
+            const indicatorColors = {
+                '^GSPC': { color: 'rgb(33, 150, 243)', name: 'S&P 500' },
+                '^IXIC': { color: 'rgb(156, 39, 176)', name: '나스닥' },
+                '^DJI': { color: 'rgb(76, 175, 80)', name: '다우존스' },
+                '^RUT': { color: 'rgb(255, 152, 0)', name: '러셀 2000' },
+                '^TNX': { color: 'rgb(233, 30, 99)', name: '미국 10년물 국채' },
+                '^IRX': { color: 'rgb(103, 58, 183)', name: '미국 2년물 국채' },
+                'GC=F': { color: 'rgb(255, 193, 7)', name: '금' },
+                'CL=F': { color: 'rgb(0, 0, 0)', name: 'WTI 원유' },
+                '^VIX': { color: 'rgb(244, 67, 54)', name: 'VIX 변동성 지수' },
+                'DX-Y.NYB': { color: 'rgb(0, 150, 136)', name: '달러 인덱스' },
+                'BTC-USD': { color: 'rgb(255, 87, 34)', name: '비트코인' },
+                'IYR': { color: 'rgb(121, 85, 72)', name: '부동산 ETF' }
+            };
+            
+            // 차트 인스턴스 - 필요할 때 생성
+            let chartInstances = {
+                price: null,
+                correlation: null,
+                returns: null,
+                returnsDistribution: null,
+                scatter: null,
+                pattern: null
+            };
+            
+            // 사용자가 추가한 개별 주식 목록
+            let userStocks = [];
+            
+            // 지연 로딩을 위한 변수
+            let activeTab = 'priceTab';
+            let chartsInitialized = {};
+            
+            // =================== 유틸리티 함수 ===================
+            
+            // 랜덤 색상 생성 함수 - 개별 주식에 사용
+            function generateRandomColor() {
+                const h = Math.floor(Math.random() * 360);
+                const s = Math.floor(Math.random() * 25) + 75; // 75-100% 채도
+                const l = Math.floor(Math.random() * 20) + 40; // 40-60% 밝기
+                return `hsl(${h}, ${s}%, ${l}%)`;
+            }
+            
+            // 이동평균 계산 함수 - 성능 최적화
+            function calculateMovingAverage(data, period) {
+                if (!data || data.length <= period) return [];
+                
+                const result = [];
+                let sum = 0;
+                
+                // 첫 번째 기간의 합계 계산
+                for (let i = 0; i < period; i++) {
+                    sum += data[i];
+                }
+                result.push(sum / period);
+                
+                // 슬라이딩 윈도우 방식으로 계산 (이전 합계 사용, O(n) 시간 복잡도)
+                for (let i = period; i < data.length; i++) {
+                    sum = sum - data[i - period] + data[i];
+                    result.push(sum / period);
+                }
+                
+                return result;
+            }
+            
+            // 로딩 표시기 제어 함수
+            function showLoading(message = '데이터를 불러오는 중입니다...') {
+                document.getElementById('loadingText').textContent = message;
+                document.getElementById('loadingIndicator').style.display = 'flex';
+            }
+            
+            function hideLoading() {
+                document.getElementById('loadingIndicator').style.display = 'none';
+            }
+            
+            // 알림 표시 함수
+            function showNotification(message, type = 'info') {
+                const notification = document.getElementById('notification');
+                notification.textContent = message;
+                notification.className = `notification ${type}`;
+                notification.classList.add('show');
+                
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 5000);
+            }
+            
+            // 날짜 형식 변환 함수
+            function formatDate(date) {
+                const d = new Date(date);
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+            
+            // 숫자 형식 변환 함수
+            function formatNumber(num, decimals = 2) {
+                if (num === null || num === undefined || isNaN(num)) return 'N/A';
+                
+                const absNum = Math.abs(num);
+                if (absNum >= 1e9) {
+                    return (num / 1e9).toFixed(decimals) + 'B';
+                } else if (absNum >= 1e6) {
+                    return (num / 1e6).toFixed(decimals) + 'M';
+                } else if (absNum >= 1e3) {
+                    return (num / 1e3).toFixed(decimals) + 'K';
+                } else {
+                    return num.toFixed(decimals);
+                }
+            }
+            
+            // 탭 전환 함수
+            function switchTab(tabId) {
+                // 모든 탭 비활성화
+                document.querySelectorAll('.tab-button').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                // 선택한 탭 활성화
+                document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+                
+                // 현재 활성 탭 저장
+                activeTab = tabId;
+                
+                // 탭에 해당하는 차트 초기화 (필요한 경우)
+                initializeChartForTab(tabId);
+            }
+            
+            // 탭에 맞는 차트 초기화 (지연 로딩)
+            function initializeChartForTab(tabId) {
+                if (chartsInitialized[tabId]) return;
+                
+                switch (tabId) {
+                    case 'priceTab':
+                        if (Object.keys(allData).length > 0) {
+                            createPriceChart();
+                        }
+                        break;
+                    case 'patternTab':
+                        if (Object.keys(allData).length > 0) {
+                            updatePatternStockDropdown();
+                        }
+                        break;
+                    case 'correlationTab':
+                        if (Object.keys(allData).length > 0) {
+                            createCorrelationMatrix();
+                        }
+                        break;
+                    case 'returnsTab':
+                        if (Object.keys(allData).length > 0) {
+                            createReturnsChart();
+                            createReturnsDistributionChart();
+                        }
+                        break;
+                    case 'scatterTab':
+                        if (Object.keys(allData).length > 0) {
+                            setupScatterChart();
+                        }
+                        break;
+                    case 'summaryTab':
+                        if (Object.keys(allData).length > 0) {
+                            createSummary();
+                        }
+                        break;
+                }
+                
+                chartsInitialized[tabId] = true;
+            }
+            
+            // API 호출에 대한 오류 처리 및 재시도 함수
+            async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+                let retries = 0;
+                
+                while (retries < maxRetries) {
+                    try {
+                        const response = await fetch(url, options);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP 오류: ${response.status}`);
+                        }
+                        
+                        return await response.json();
+                    } catch (error) {
+                        retries++;
+                        console.error(`API 호출 오류 (시도 ${retries}/${maxRetries}):`, error);
+                        
+                        if (retries >= maxRetries) {
+                            throw new Error(`API 호출이 ${maxRetries}번 실패했습니다: ${error.message}`);
+                        }
+                        
+                        // 지수 백오프로 재시도 (1초, 2초, 4초...)
+                        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retries - 1) * 1000));
+                    }
+                }
+            }
+            
+            // 시간 단위 결정 함수 (차트 X축용)
+            function getTimeUnit(dates) {
+                if (!dates || dates.length < 2) return 'day';
+                
+                const firstDate = new Date(dates[0]);
+                const lastDate = new Date(dates[dates.length - 1]);
+                const daysDiff = (lastDate - firstDate) / (1000 * 60 * 60 * 24);
+                
+                if (daysDiff <= 60) return 'day';
+                if (daysDiff <= 730) return 'month';
+                return 'year';
+            }
+            
+            // 골든 크로스 및 데드 크로스 감지 함수
+            function detectCrossovers(ma20, ma50, dates) {
+                const golden = [];
+                const death = [];
+                
+                // 초기화
+                let prevMA20Above = null;
+                
+                // 골든 크로스 및 데드 크로스 감지
+                for (let i = 0; i < Math.min(ma20.length, ma50.length); i++) {
+                    const ma20Value = ma20[i];
+                    const ma50Value = ma50[i];
+                    const dateIndex = i + 49; // MA50은 50번째 데이터부터 시작
+                    
+                    if (dateIndex >= dates.length) break;
+                    
+                    const ma20Above = ma20Value > ma50Value;
+                    
+                    if (prevMA20Above !== null) {
+                        if (ma20Above && !prevMA20Above) {
+                            // 골든 크로스: MA20이 MA50 위로 교차
+                            golden.push({
+                                x: dates[dateIndex],
+                                y: ma20Value
+                            });
+                        } else if (!ma20Above && prevMA20Above) {
+                            // 데드 크로스: MA20이 MA50 아래로 교차
+                            death.push({
+                                x: dates[dateIndex],
+                                y: ma20Value
+                            });
+                        }
+                    }
+                    
+                    prevMA20Above = ma20Above;
+                }
+                
+                return { golden, death };
+            }
+            
+            // =================== 이벤트 리스너 등록 ===================
+            
+            // IndexedDB 초기화
+            initDb();
+            
+            // 날짜 초기화
+            const today = new Date();
+            document.getElementById('endDate').valueAsDate = today;
+            
+            const oneYearAgo = new Date();
+            oneYearAgo.setFullYear(today.getFullYear() - 1);
+            document.getElementById('startDate').valueAsDate = oneYearAgo;
+            
+            // 분석 시작 버튼
+            document.getElementById('analyzeButton').addEventListener('click', startAnalysis);
+            
+            // 가격 차트 버튼
+            document.getElementById('rawPriceBtn').addEventListener('click', showRawPrices);
+            document.getElementById('normalizedPriceBtn').addEventListener('click', showNormalizedPrices);
+            
+            // 패턴 분석 버튼
+            document.getElementById('showPatternBtn').addEventListener('click', showPatternAnalysis);
+            
+            // 기간 선택 이벤트
+            document.getElementById('period').addEventListener('change', function() {
+                updateDateInputs(this.value);
+            });
+            
+            // 탭 전환 이벤트
+            document.querySelectorAll('.tab-button').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    switchTab(this.getAttribute('data-tab'));
+                });
+            });
+            
+            // 체크박스 개수 제한 (최소 2개, 최대 8개)
+            const checkboxes = document.querySelectorAll('.indicator-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const checked = document.querySelectorAll('.indicator-checkbox:checked');
+                    if (checked.length > 8) {
+                        this.checked = false;
+                        showNotification('최대 8개의 지표만 선택할 수 있습니다.', 'warning');
+                    } else if (checked.length < 2 && userStocks.length === 0) {
+                        this.checked = true;
+                        showNotification('최소 2개의 지표를 선택하거나 개별 주식을 추가해야 합니다.', 'warning');
+                    }
+                });
+            });
+            
+            // 주식 검색 이벤트 리스너
+            setupStockSearch();
+            
+            // 실시간 업데이트 체크박스 이벤트
+            document.getElementById('realTimeUpdate').addEventListener('change', function() {
+                if (this.checked && Object.keys(allData).length > 0) {
+                    // 실시간 업데이트 시작
+                    startRealTimeUpdates();
+                    showNotification('실시간 데이터 업데이트가 활성화되었습니다 (15분마다 업데이트)', 'info');
+                } else {
+                    // 실시간 업데이트 중지
+                    stopRealTimeUpdates();
+                }
+            });
+            
+            // =================== 주식 검색 기능 ===================
+            
+            function setupStockSearch() {
+                const stockSearchInput = document.getElementById('stockSearch');
+                const autocompleteResults = document.getElementById('autocompleteResults');
+                
+                // 디바운스 처리를 위한 변수
+                let debounceTimeout = null;
+                
+                stockSearchInput.addEventListener('input', function() {
+                    // 이전 타이머 제거
+                    clearTimeout(debounceTimeout);
+                    
+                    // 200ms 후에 검색 실행 (타이핑 중에는 실행하지 않음)
+                    debounceTimeout = setTimeout(() => {
+                        const searchTerm = this.value.toLowerCase();
+                        if (searchTerm.length < 2) {
+                            autocompleteResults.classList.add('hidden');
+                            return;
+                        }
+                        
+                        // 검색어에 맞는 주식 필터링 (대규모 배열 최적화)
+                        const startTime = performance.now();
+                        let filteredStocks = [];
+                        
+                        // 배열 크기가 크면 인덱스를 사용하여 최적화
+                        for (let i = 0; i < allStockSymbols.length && filteredStocks.length < 10; i++) {
+                            const stock = allStockSymbols[i];
+                            if (stock.symbol.toLowerCase().includes(searchTerm) || 
+                                stock.name.toLowerCase().includes(searchTerm)) {
+                                filteredStocks.push(stock);
+                            }
+                        }
+                        
+                        console.log(`검색 성능: ${performance.now() - startTime}ms`);
+                        
+                        // 검색 결과 표시
+                        if (filteredStocks.length > 0) {
+                            autocompleteResults.innerHTML = '';
+                            
+                            // 최대 10개만 표시 (성능 최적화)
+                            filteredStocks.slice(0, 10).forEach(stock => {
+                                const item = document.createElement('div');
+                                item.className = 'autocomplete-item';
+                                item.innerHTML = `<strong>${stock.symbol}</strong> - ${stock.name} (${stock.exchange})`;
+                                
+                                // 클릭 이벤트
+                                item.addEventListener('click', function() {
+                                    selectStock(stock);
+                                    autocompleteResults.classList.add('hidden');
+                                    stockSearchInput.value = '';
+                                });
+                                
+                                autocompleteResults.appendChild(item);
+                            });
+                            
+                            autocompleteResults.classList.remove('hidden');
+                        } else {
+                            autocompleteResults.classList.add('hidden');
+                        }
+                    }, 200); // 200ms 딜레이
+                });
+                
+                // 검색 버튼 이벤트
+                document.getElementById('searchButton').addEventListener('click', function() {
+                    const searchTerm = stockSearchInput.value.toLowerCase();
+                    if (searchTerm.length < 2) return;
+                    
+                    // 검색어에 맞는 주식 필터링
+                    const filteredStocks = allStockSymbols.filter(stock => 
+                        stock.symbol.toLowerCase().includes(searchTerm) || 
+                        stock.name.toLowerCase().includes(searchTerm)
+                    );
+                    
+                    if (filteredStocks.length > 0) {
+                        selectStock(filteredStocks[0]);
+                        stockSearchInput.value = '';
+                        autocompleteResults.classList.add('hidden');
+                        showNotification(`${filteredStocks[0].symbol} 종목이 추가되었습니다.`, 'success');
+                    } else {
+                        showNotification('검색 결과가 없습니다. 다른 키워드로 검색해 주세요.', 'warning');
+                    }
+                });
+                
+                // 검색창 외부 클릭 시 자동완성 결과 숨기기
+                document.addEventListener('click', function(e) {
+                    if (!stockSearchInput.contains(e.target) && !autocompleteResults.contains(e.target)) {
+                        autocompleteResults.classList.add('hidden');
+                    }
+                });
+            }
+            
+            // 주식 선택 함수
+            function selectStock(stock) {
+                if (userStocks.some(s => s.symbol === stock.symbol)) {
+                    showNotification(`${stock.symbol}는 이미 선택되어 있습니다.`, 'warning');
+                    return;
+                }
+                
+                if (userStocks.length >= 5) {
+                    showNotification('최대 5개의 개별 주식만 추가할 수 있습니다.', 'warning');
+                    return;
+                }
+                
+                // 사용자 주식 목록에 추가
+                const randomColor = generateRandomColor();
+                stock.color = randomColor;
+                userStocks.push(stock);
+                
+                // indicatorColors에 추가
+                indicatorColors[stock.symbol] = {
+                    color: randomColor,
+                    name: `${stock.name} (${stock.symbol})`
+                };
+                
+                // 선택된 주식 표시
+                updateSelectedStocks();
+                
+                // 주식 정보 표시
+                showStockInfo(stock);
+                
+                // 실시간 모니터링 활성화된 경우 실시간 시세 업데이트
+                if (document.getElementById('realTimeUpdate').checked && document.getElementById('resultsSection').style.display !== 'none') {
+                    fetchLiveQuote(stock.symbol);
+                }
+            }
+            
+            // 선택된 주식 목록 업데이트
+            function updateSelectedStocks() {
+                const selectedStocksContainer = document.getElementById('selectedStocks');
+                const noStocksMessage = document.getElementById('noStocksMessage');
+                
+                if (userStocks.length > 0) {
+                    noStocksMessage.style.display = 'none';
+                    
+                    selectedStocksContainer.innerHTML = '';
+                    userStocks.forEach(stock => {
+                        const stockElement = document.createElement('div');
+                        stockElement.className = 'selected-stock';
+                        stockElement.innerHTML = `
+                            <span style="background-color: ${stock.color}; width: 12px; height: 12px; display: inline-block; margin-right: 8px; border-radius: 50%;"></span>
+                            <span><strong>${stock.symbol}</strong> - ${stock.name}</span>
+                            <span class="remove-stock ml-auto" data-symbol="${stock.symbol}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </span>
+                        `;
+                        selectedStocksContainer.appendChild(stockElement);
+                    });
+                    
+                    // 삭제 버튼 이벤트 리스너 추가
+                    document.querySelectorAll('.remove-stock').forEach(button => {
+                        button.addEventListener('click', function() {
+                            const symbol = this.getAttribute('data-symbol');
+                            removeStock(symbol);
+                        });
+                    });
+                } else {
+                    noStocksMessage.style.display = 'block';
+                }
+            }
+            
+            // 선택된 주식 삭제
+            function removeStock(symbol) {
+                userStocks = userStocks.filter(stock => stock.symbol !== symbol);
+                delete indicatorColors[symbol];
+                updateSelectedStocks();
+                
+                // 주식 정보 섹션 숨기기
+                document.getElementById('stockInfo').classList.add('hidden');
+                
+                showNotification(`${symbol} 종목이 제거되었습니다.`, 'info');
+                
+                // 결과가 표시되고 있으면 실시간 시세에서도 제거
+                if (document.getElementById('resultsSection').style.display !== 'none') {
+                    const row = document.querySelector(`#liveQuotesTableBody tr[data-symbol="${symbol}"]`);
+                    if (row) row.remove();
+                }
+            }
+            
+            // 주식 정보 표시
+            function showStockInfo(stock) {
+                const stockInfoContainer = document.getElementById('stockInfo');
+                stockInfoContainer.classList.remove('hidden');
+                
+                stockInfoContainer.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">${stock.name} (${stock.symbol})</h3>
+                            <p><strong>섹터:</strong> ${stock.sector}</p>
+                            <p><strong>거래소:</strong> ${stock.exchange}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-700 mb-2">
+                                <span style="background-color: ${stock.color}; width: 12px; height: 12px; display: inline-block; margin-right: 8px; border-radius: 50%;"></span>
+                                이 색상으로 차트에 표시됩니다.
+                            </p>
+                            <p class="text-sm text-gray-700">
+                                "분석 시작" 버튼을 클릭하여 선택한 주식과 다른 지표들 간의 상관관계를 분석할 수 있습니다.
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // 기간 선택에 따른 날짜 입력 업데이트
+            function updateDateInputs(period) {
+                const end = new Date();
+                let start = new Date();
+                
+                switch(period) {
+                    case '1m':
+                        start.setMonth(end.getMonth() - 1);
+                        break;
+                    case '3m':
+                        start.setMonth(end.getMonth() - 3);
+                        break;
+                    case '6m':
+                        start.setMonth(end.getMonth() - 6);
+                        break;
+                    case '1y':
+                        start.setFullYear(end.getFullYear() - 1);
+                        break;
+                    case '2y':
+                        start.setFullYear(end.getFullYear() - 2);
+                        break;
+                    case '5y':
+                        start.setFullYear(end.getFullYear() - 5);
+                        break;
+                    case '10y':
+                        start.setFullYear(end.getFullYear() - 10);
+                        break;
+                    case 'max':
+                        start = new Date(1980, 0, 1); // 대략적인 최대 가능 날짜
+                        break;
+                }
+                
+                document.getElementById('startDate').valueAsDate = start;
+                document.getElementById('endDate').valueAsDate = end;
+            }
+            
+            // =================== 데이터 분석 및 처리 ===================
+            
+            // 분석 시작 함수
+            async function startAnalysis() {
+                const selectedCheckboxes = document.querySelectorAll('.indicator-checkbox:checked');
+                
+                if (selectedCheckboxes.length < 2 && userStocks.length === 0) {
+                    showNotification('최소 2개의 지표를 선택하거나 개별 주식을 추가해야 합니다.', 'warning');
+                    return;
+                }
+                
+                if (selectedCheckboxes.length > 8) {
+                    showNotification('최대 8개의 지표만 선택할 수 있습니다.', 'warning');
+                    return;
+                }
+                
+                // 로딩 인디케이터 표시
+                showLoading('데이터를 불러오는 중입니다...');
+                
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+                
+                if (new Date(startDate) >= new Date(endDate)) {
+                    showNotification('시작 날짜는 종료 날짜보다 이전이어야 합니다.', 'error');
+                    hideLoading();
+                    return;
+                }
+                
+                // 차트 초기화 상태 리셋
+                chartsInitialized = {};
+                
+                // 모든 심볼 목록 가져오기 (지표 + 사용자 선택 주식)
+                const indicatorSymbols = Array.from(selectedCheckboxes).map(cb => cb.value);
+                const userStockSymbols = userStocks.map(stock => stock.symbol);
+                const symbols = [...indicatorSymbols, ...userStockSymbols];
+                
+                try {
+                    // 로딩 메시지 업데이트
+                    showLoading('데이터를 가져오는 중입니다...');
+                    
+                    // 데이터 가져오기 (병렬 처리)
+                    await fetchAllData(symbols, startDate, endDate);
+                    
+                    // 로딩 메시지 업데이트
+                    showLoading('데이터를 처리하는 중입니다...');
+                    
+                    // 데이터 처리 (효율적인 알고리즘 사용)
+                    processData();
+                    
+                    // 결과 섹션 표시
+                    document.getElementById('resultsSection').style.display = 'block';
+                    
+                    // 실시간 시세 업데이트
+                    updateLiveQuotes(symbols);
+                    
+                    // 기본 탭 초기화 (지연 로딩)
+                    switchTab('priceTab');
+                    
+                    // 실시간 업데이트 체크되어 있으면 타이머 시작
+                    if (document.getElementById('realTimeUpdate').checked) {
+                        startRealTimeUpdates();
+                    }
+                    
+                } catch (error) {
+                    console.error('데이터 분석 중 오류 발생:', error);
+                    showNotification('데이터를 가져오는 중 오류가 발생했습니다: ' + error.message, 'error');
+                } finally {
+                    hideLoading();
+                }
+            }
+            
+            // 데이터 가져오기 (최적화 및 캐싱)
+            async function fetchAllData(symbols, startDate, endDate) {
+                allData = {};
+                
+                // 날짜 형식 변환
+                const startUnixTime = Math.floor(new Date(startDate).getTime() / 1000);
+                const endUnixTime = Math.floor(new Date(endDate).getTime() / 1000);
+                
+                // 작업 단위로 나누어 처리 (한 번에 3개씩)
+                const batchSize = 3;
+                for (let i = 0; i < symbols.length; i += batchSize) {
+                    const batch = symbols.slice(i, i + batchSize);
+                    
+                    // 진행 상황 업데이트
+                    showLoading(`데이터를 가져오는 중입니다... (${i+1}/${symbols.length})`);
+                    
+                    // 배치 병렬 처리로 성능 최적화
+                    const promises = batch.map(async (symbol) => {
+                        try {
+                            // 캐시에서 먼저 확인
+                            const cachedData = await dataCache.get(symbol, startDate, endDate);
+                            if (cachedData) {
+                                console.log(`${symbol}: 캐시에서 데이터를 불러왔습니다.`);
+                                allData[symbol] = cachedData;
+                                return;
+                            }
+                            
+                            // 캐시에 없으면 새로 가져오기
+                            await fetchHistoricalData(symbol, startDate, endDate);
+                        } catch (error) {
+                            console.error(`${symbol} 데이터 가져오기 실패:`, error);
+                            
+                            // 데모 데이터 생성 (백업 메커니즘)
+                            await generateDemoData(symbol, startDate, endDate);
+                            
+                            // 사용자에게 알림
+                            showNotification(`${symbol} 데이터를 가져오지 못해 샘플 데이터를 사용합니다.`, 'warning');
+                        }
+                    });
+                    
+                    await Promise.all(promises);
+                    
+                    // UI 업데이트 기회 제공 (브라우저가 멈추지 않도록)
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            }
+            
+            // 실시간 시세 데이터 업데이트
+            async function updateLiveQuotes(symbols) {
+                const liveQuotesTableBody = document.getElementById('liveQuotesTableBody');
+                liveQuotesTableBody.innerHTML = '';
+                
+                // 현재 날짜/시간 업데이트
+                document.getElementById('lastUpdated').textContent = `마지막 업데이트: ${new Date().toLocaleString()}`;
+                
+                // 모든 심볼에 대해 시세 가져오기
+                for (const symbol of symbols) {
+                    await fetchLiveQuote(symbol);
+                }
+            }
+            
+            // 개별 종목 실시간 시세 가져오기
+            async function fetchLiveQuote(symbol) {
+                try {
+                    const liveQuotesTableBody = document.getElementById('liveQuotesTableBody');
+                    
+                    // 실제 API 호출 대신 데모 데이터 생성
+                    const demoData = {
+                        symbol: symbol,
+                        name: indicatorColors[symbol].name,
+                        price: getLastPrice(symbol),
+                        change: getRandomChange(),
+                        volume: Math.floor(Math.random() * 10000000) + 100000,
+                        dayLow: getLastPrice(symbol) * 0.98,
+                        dayHigh: getLastPrice(symbol) * 1.02
+                    };
+                    
+                    // 변동률 계산
+                    demoData.changePercent = (demoData.change / (demoData.price - demoData.change)) * 100;
+                    
+                    // 이전 가격과 비교하여 가격 변동 알림
+                    if (previousPrices[symbol] && document.getElementById('priceAlerts').checked) {
+                        const prevPrice = previousPrices[symbol];
+                        const priceChange = ((demoData.price - prevPrice) / prevPrice) * 100;
+                        
+                        // 1% 이상 변동 시 알림
+                        if (Math.abs(priceChange) >= 1) {
+                            const direction = priceChange > 0 ? '상승' : '하락';
+                            showNotification(
+                                `${demoData.name} (${symbol}): ${Math.abs(priceChange).toFixed(2)}% ${direction}`, 
+                                priceChange > 0 ? 'success' : 'error'
+                            );
+                        }
+                    }
+                    
+                    // 현재 가격 저장
+                    previousPrices[symbol] = demoData.price;
+                    
+                    // 기존 행이 있는지 확인
+                    let row = document.querySelector(`#liveQuotesTableBody tr[data-symbol="${symbol}"]`);
+                    
+                    // 행 HTML 생성
+                    const rowHtml = `
+                        <td class="py-2 px-4 border-b border-gray-200">
+                            <div class="flex items-center">
+                                <span style="background-color: ${indicatorColors[symbol].color}; width: 10px; height: 10px; display: inline-block; margin-right: 8px; border-radius: 50%;"></span>
+                                <span class="font-medium">${demoData.name}</span>
+                            </div>
+                        </td>
+                        <td class="py-2 px-4 border-b border-gray-200 text-right font-semibold">${demoData.price.toFixed(2)}</td>
+                        <td class="py-2 px-4 border-b border-gray-200 text-right ${demoData.change >= 0 ? 'price-change-up' : 'price-change-down'}">${demoData.change.toFixed(2)}</td>
+                        <td class="py-2 px-4 border-b border-gray-200 text-right ${demoData.changePercent >= 0 ? 'price-change-up' : 'price-change-down'}">${demoData.changePercent.toFixed(2)}%</td>
+                        <td class="py-2 px-4 border-b border-gray-200 text-right">${demoData.dayLow.toFixed(2)} / ${demoData.dayHigh.toFixed(2)}</td>
+                        <td class="py-2 px-4 border-b border-gray-200 text-right">${formatNumber(demoData.volume)}</td>
+                    `;
+                    
+                    if (row) {
+                        // 기존 행 업데이트
+                        row.innerHTML = rowHtml;
+                    } else {
+                        // 새 행 생성
+                        row = document.createElement('tr');
+                        row.setAttribute('data-symbol', symbol);
+                        row.innerHTML = rowHtml;
+                        liveQuotesTableBody.appendChild(row);
+                    }
+                    
+                } catch (error) {
+                    console.error(`${symbol} 실시간 시세 불러오기 실패:`, error);
+                }
+            }
+            
+            // 마지막 주가 가져오기 (데모용)
+            function getLastPrice(symbol) {
+                if (allData[symbol] && allData[symbol].prices && allData[symbol].prices.length > 0) {
+                    return allData[symbol].prices[allData[symbol].prices.length - 1];
+                }
+                
+                // 주요 지표별 기본값
+                const defaultPrices = {
+                    '^GSPC': 5200, // S&P 500
+                    '^IXIC': 16300, // NASDAQ
+                    '^DJI': 39000, // 다우존스
+                    '^RUT': 2100, // 러셀 2000
+                    '^TNX': 4.5, // 10년물 국채
+                    '^IRX': 5.0, // 2년물 국채
+                    'GC=F': 2300, // 금
+                    'CL=F': 80, // 원유
+                    '^VIX': 15, // VIX
+                    'DX-Y.NYB': 105, // 달러 인덱스
+                    'BTC-USD': 65000, // 비트코인
+                    'IYR': 90 // 부동산 ETF
+                };
+                
+                if (defaultPrices[symbol]) {
+                    return defaultPrices[symbol];
+                }
+                
+                // 개별 주식의 경우 표준 범위 안의 값 반환
+                return Math.floor(Math.random() * 900) + 100;
+            }
+            
+            // 랜덤 가격 변동 생성 (데모용)
+            function getRandomChange() {
+                const change = (Math.random() * 2 - 1) * 5; // -5에서 5 사이의 값
+                return Math.round(change * 100) / 100; // 소수점 둘째자리까지
+            }
+            
+            // 실시간 업데이트 시작
+            function startRealTimeUpdates() {
+                if (updateTimer) {
+                    clearInterval(updateTimer);
+                }
+                
+                // 15분마다 데이터 업데이트
+                updateTimer = setInterval(() => {
+                    // 현재 표시된 심볼 목록 가져오기
+                    const symbols = Object.keys(allData).filter(key => key !== 'correlationMatrix');
+                    
+                    // 실시간 시세 업데이트
+                    updateLiveQuotes(symbols);
+                    
+                    // 알림 표시
+                    document.getElementById('lastUpdated').textContent = `마지막 업데이트: ${new Date().toLocaleString()}`;
+                }, 900000); // 15분 (900,000ms)
+            }
+            
+            // 실시간 업데이트 중지
+            function stopRealTimeUpdates() {
+                if (updateTimer) {
+                    clearInterval(updateTimer);
+                    updateTimer = null;
+                }
+            }
+            
+            // Yahoo Finance API 대체 - 히스토리컬 데이터 가져오기
+            async function fetchHistoricalData(symbol, startDate, endDate) {
+                try {
+                    // CORS 문제로 인해 실제 API 호출 대신 데모 데이터 생성
+                    await generateDemoData(symbol, startDate, endDate);
+                } catch (error) {
+                    console.error(`${symbol} 데이터 가져오기 실패:`, error);
+                    throw error;
+                }
+            }
+            
+            // 데모 데이터 생성 함수 (API 호출 실패 시 백업)
+            async function generateDemoData(symbol, startDate, endDate) {
+                // 주말 제외한 날짜 범위 계산
+                const startDateObj = new Date(startDate);
+                const endDateObj = new Date(endDate);
+                
+                const dates = [];
+                const prices = [];
+                
+                let currentDate = new Date(startDateObj);
+                
+                // 시작값 설정 (심볼별로 다른 시작 값)
+                let baseValue = 100 + (symbol.charCodeAt(0) % 20) * 10;
+                if (symbol === '^TNX' || symbol === '^IRX') baseValue = 3 + (symbol.charCodeAt(1) % 5);
+                if (symbol === 'BTC-USD') baseValue = 20000 + (symbol.charCodeAt(2) % 10) * 1000;
+                if (symbol === 'GC=F') baseValue = 1800 + (symbol.charCodeAt(1) % 5) * 100;
+                if (symbol === 'CL=F') baseValue = 70 + (symbol.charCodeAt(1) % 5) * 10;
+                
+                // 개별 주식일 경우 특별한 시작 가격 설정
+                const userStock = userStocks.find(s => s.symbol === symbol);
+                if (userStock) {
+                    baseValue = 50 + (symbol.charCodeAt(0) % 30) * 5;
+                }
+                
+                // 변동성 설정 (심볼별로 다른 변동성)
+                let volatility = 0.01;
+                if (symbol === '^VIX') volatility = 0.05;
+                if (symbol === 'BTC-USD') volatility = 0.03;
+                if (userStock) volatility = 0.015 + (symbol.charCodeAt(0) % 10) * 0.002; // 개별 주식은 약간 더 높은 변동성
+                
+                // 추세 설정 (심볼별로 다른 추세)
+                let trend = 0.0002;
+                if (symbol === '^TNX' || symbol === '^IRX') trend = 0.0001;
+                if (symbol === 'DX-Y.NYB') trend = -0.0001;
+                if (symbol === 'GC=F') trend = 0.0003;
+                if (userStock) trend = 0.0003 + (symbol.charCodeAt(0) % 6) * 0.0001; // 개별 주식은 약간 더 높은 추세
+                
+                // 상관관계 시뮬레이션을 위한 시드 값
+                const correlationSeed = {
+                    '^GSPC': [1, 0.9, 0.8, 0.85, -0.2, -0.25, 0.4, 0.3, -0.7, 0.15, 0.65, 0.6],
+                    '^IXIC': [0.9, 1, 0.75, 0.8, -0.15, -0.2, 0.35, 0.25, -0.65, 0.1, 0.7, 0.55],
+                    '^DJI': [0.8, 0.75, 1, 0.75, -0.1, -0.15, 0.3, 0.4, -0.6, 0.2, 0.5, 0.65],
+                    '^RUT': [0.85, 0.8, 0.75, 1, -0.15, -0.2, 0.25, 0.35, -0.7, 0.05, 0.6, 0.7],
+                    '^TNX': [-0.2, -0.15, -0.1, -0.15, 1, 0.9, -0.4, 0.2, 0.3, 0.7, -0.3, -0.5],
+                    '^IRX': [-0.25, -0.2, -0.15, -0.2, 0.9, 1, -0.35, 0.15, 0.35, 0.65, -0.25, -0.45],
+                    'GC=F': [0.4, 0.35, 0.3, 0.25, -0.4, -0.35, 1, -0.1, -0.2, -0.5, 0.45, 0.3],
+                    'CL=F': [0.3, 0.25, 0.4, 0.35, 0.2, 0.15, -0.1, 1, -0.3, 0.35, 0.2, 0.15],
+                    '^VIX': [-0.7, -0.65, -0.6, -0.7, 0.3, 0.35, -0.2, -0.3, 1, 0.1, -0.4, -0.5],
+                    'DX-Y.NYB': [0.15, 0.1, 0.2, 0.05, 0.7, 0.65, -0.5, 0.35, 0.1, 1, -0.1, -0.2],
+                    'BTC-USD': [0.65, 0.7, 0.5, 0.6, -0.3, -0.25, 0.45, 0.2, -0.4, -0.1, 1, 0.3],
+                    'IYR': [0.6, 0.55, 0.65, 0.7, -0.5, -0.45, 0.3, 0.15, -0.5, -0.2, 0.3, 1]
+                };
+                
+                // 사용자 주식의 경우 상관관계 시드 값 추가
+                if (userStock) {
+                    // 섹터별 상관관계 값 설정
+                    if (userStock.sector === '기술') {
+                        correlationSeed[symbol] = [0.85, 0.95, 0.7, 0.8, -0.15, -0.2, 0.3, 0.2, -0.6, 0.1, 0.75, 0.5];
+                    } else if (userStock.sector === '금융') {
+                        correlationSeed[symbol] = [0.8, 0.7, 0.75, 0.7, 0.4, 0.35, 0.1, 0.2, -0.5, 0.3, 0.4, 0.3];
+                    } else if (userStock.sector === '헬스케어') {
+                        correlationSeed[symbol] = [0.75, 0.65, 0.85, 0.7, -0.1, -0.15, 0.25, 0.15, -0.45, 0.2, 0.3, 0.4];
+                    } else if (userStock.sector === '소비자 서비스' || userStock.sector === '소비재') {
+                        correlationSeed[symbol] = [0.7, 0.6, 0.8, 0.75, -0.05, -0.1, 0.3, 0.25, -0.4, 0.15, 0.35, 0.7];
+                    } else {
+                        correlationSeed[symbol] = [0.75, 0.8, 0.7, 0.75, -0.1, -0.15, 0.35, 0.3, -0.5, 0.1, 0.6, 0.5];
+                    }
+                }
+                
+                // 각 심볼의 인덱스 찾기
+                const symbolIndex = Object.keys(correlationSeed).indexOf(symbol);
+                
+                // 데이터 생성 최적화 (일괄 처리)
+                const daysCount = Math.ceil((endDateObj - startDateObj) / (24 * 60 * 60 * 1000));
+                const tradingDaysCount = Math.ceil(daysCount * 5/7); // 주말 제외
+                const batchSize = 100; // 한 번에 100일치 데이터 생성 (성능 최적화)
+                
+                // 초기 가격 설정
+                let lastPrice = baseValue;
+                
+                for (let day = 0; day < tradingDaysCount; day += batchSize) {
+                    // 배치 처리
+                    const batchDays = Math.min(batchSize, tradingDaysCount - day);
+                    
+                    for (let i = 0; i < batchDays; i++) {
+                        // 주말 건너뛰기
+                        while (currentDate.getDay() === 0 || currentDate.getDay() === 6) {
+                            currentDate.setDate(currentDate.getDate() + 1);
+                        }
+                        
+                        // 상관관계 및 랜덤 변동 계산
+                        const randomValue = Math.random() * 2 - 1; // -1과 1 사이의 랜덤값
+                        
+                        // 다른 심볼과의 상관관계 시뮬레이션
+                        let correlationEffect = 0;
+                        Object.keys(correlationSeed).forEach((otherSymbol, index) => {
+                            if (otherSymbol !== symbol && otherSymbol in allData && index < (correlationSeed[symbol] || []).length) {
+                                const lastIndex = allData[otherSymbol].prices.length - 1;
+                                if (lastIndex >= 0) {
+                                    // 이전 날짜와의 변화율 계산
+                                    const otherChange = allData[otherSymbol].prices.length > 1 ? 
+                                        (allData[otherSymbol].prices[lastIndex] / allData[otherSymbol].prices[lastIndex-1] - 1) : 0;
+                                    
+                                    // 상관관계에 따라 현재 값에 영향
+                                    correlationEffect += otherChange * (correlationSeed[symbol] ? correlationSeed[symbol][index] : 0) * 0.5;
+                                }
+                            }
+                        });
+                        
+                        // 가격 변동 계산 (상관관계, 추세, 변동성 반영)
+                        const change = randomValue * volatility + trend + correlationEffect;
+                        lastPrice = lastPrice * (1 + change);
+                        
+                        // 약간의 랜덤 워크 추가
+                        const randomWalk = (Math.random() - 0.5) * volatility;
+                        lastPrice = Math.max(0.1, lastPrice * (1 + randomWalk));
+                        
+                        dates.push(new Date(currentDate));
+                        prices.push(lastPrice);
+                        
+                        // 다음 날짜로 이동
+                        currentDate.setDate(currentDate.getDate() + 1);
+                    }
+                }
+                
+                // 데이터 저장
+                const result = {
+                    dates: dates,
+                    prices: prices,
+                    name: indicatorColors[symbol].name
+                };
+                
+                // 데이터 캐싱
+                dataCache.set(symbol, startDate, endDate, result);
+                
+                // 최종 데이터 저장
+                allData[symbol] = result;
+            }
+            
+            // 데이터 처리 최적화
+            function processData() {
+                // Web Worker나 다른 최적화 기법을 사용해 성능 개선 가능
+                // 지금은 메인 스레드에서 처리, 500ms마다 브라우저에 제어권 반환
+                
+                // 심볼 리스트 가져오기
+                const symbols = Object.keys(allData).filter(key => key !== 'correlationMatrix');
+                
+                // Worker 사용 없이 배치 처리로 최적화
+                processDataInBatches(symbols, 0, 10);
+            }
+            
+            // 배치 처리로 데이터 처리 최적화
+            function processDataInBatches(symbols, startIndex, batchSize) {
+                const endIndex = Math.min(startIndex + batchSize, symbols.length);
+                const batch = symbols.slice(startIndex, endIndex);
+                
+                batch.forEach(symbol => {
+                    // 수익률 계산 (최적화)
+                    const prices = allData[symbol].prices;
+                    const pricesLength = prices.length;
+                    const returns = new Array(pricesLength - 1);
+                    
+                    // 수익률 계산 (루프 최적화)
+                    for (let j = 1; j < pricesLength; j++) {
+                        returns[j-1] = (prices[j] / prices[j-1]) - 1;
+                    }
+                    
+                    // 배열 복사 없이 직접 할당하여 메모리 사용 최적화
+                    allData[symbol].returns = returns;
+                    
+                    // 정규화된 가격 계산 (첫 날 = 100)
+                    const firstPrice = prices[0];
+                    const normalizedPrices = new Array(pricesLength);
+                    
+                    // 정규화 계산 (루프 최적화)
+                    for (let j = 0; j < pricesLength; j++) {
+                        normalizedPrices[j] = (prices[j] / firstPrice) * 100;
+                    }
+                    
+                    allData[symbol].normalizedPrices = normalizedPrices;
+                });
+                
+                // 다음 배치 처리
+                if (endIndex < symbols.length) {
+                    setTimeout(() => {
+                        processDataInBatches(symbols, endIndex, batchSize);
+                    }, 0);
+                } else {
+                    // 모든 배치 처리 완료 후 상관관계 행렬 계산
+                    const correlationMatrix = calculateCorrelationMatrix();
+                    allData.correlationMatrix = correlationMatrix;
+                }
+            }
+            
+            // 상관관계 행렬 계산 (최적화)
+            function calculateCorrelationMatrix() {
+                const symbols = Object.keys(allData).filter(key => key !== 'correlationMatrix');
+                const symbolsCount = symbols.length;
+                const matrix = Array(symbolsCount).fill().map(() => Array(symbolsCount).fill(0));
+                
+                // 대각선 요소는 항상 1 (효율성을 위해 미리 설정)
+                for (let i = 0; i < symbolsCount; i++) {
+                    matrix[i][i] = 1;
+                }
+                
+                // 상관계수 계산 (상삼각행렬만 계산하고 나머지는 대칭 활용)
+                for (let i = 0; i < symbolsCount; i++) {
+                    for (let j = i + 1; j < symbolsCount; j++) {
+                        const correlation = calculateCorrelation(
+                            allData[symbols[i]].returns,
+                            allData[symbols[j]].returns
+                        );
+                        
+                        // 상삼각행렬과 하삼각행렬 동시 설정 (대칭성 활용)
+                        matrix[i][j] = correlation;
+                        matrix[j][i] = correlation;
+                    }
+                }
+                
+                return matrix;
+            }
+            
+            // 두 배열 간의 상관계수 계산 (최적화)
+            function calculateCorrelation(array1, array2) {
+                const n = Math.min(array1.length, array2.length);
+                
+                if (n <= 1) return 0;
+                
+                let sum1 = 0, sum2 = 0, sum1Sq = 0, sum2Sq = 0, pSum = 0;
+                
+                // 한 번의 반복문으로 모든 합계 계산 (성능 최적화)
+                for (let i = 0; i < n; i++) {
+                    sum1 += array1[i];
+                    sum2 += array2[i];
+                    sum1Sq += array1[i] * array1[i];
+                    sum2Sq += array2[i] * array2[i];
+                    pSum += array1[i] * array2[i];
+                }
+                
+                // 피어슨 상관계수 공식
+                const num = pSum - (sum1 * sum2 / n);
+                const den = Math.sqrt((sum1Sq - sum1 * sum1 / n) * (sum2Sq - sum2 * sum2 / n));
+                
+                if (den === 0) return 0;
+                return num / den;
+            }
+            
+            // =================== 차트 생성 및 시각화 ===================
+            
+            // 가격 차트 생성
+            function createPriceChart(useNormalized = false) {
+                const ctx = document.getElementById('priceChart').getContext('2d');
+                
+                if (chartInstances.price) {
+                    chartInstances.price.destroy();
+                }
+                
+                const symbols = Object.keys(allData).filter(key => key !== 'correlationMatrix');
+                const datasets = [];
+                
+                for (const symbol of symbols) {
+                    datasets.push({
+                        label: indicatorColors[symbol].name,
+                        data: allData[symbol].dates.map((date, i) => ({
+                            x: date,
+                            y: useNormalized ? allData[symbol].normalizedPrices[i] : allData[symbol].prices[i]
+                        })),
+                        borderColor: indicatorColors[symbol].color,
+                        backgroundColor: 'rgba(0, 0, 0, 0)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        tension: 0.1
+                    });
+                }
+                
+                chartInstances.price = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: datasets
+                    },
+                    options: {
+                        animation: false, // 성능 최적화
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        plugins: {
+                            tooltip: {
+                                enabled: true,
+                                mode: 'index',
+                                intersect: false
+                            },
+                            title: {
+                                display: true,
+                                text: useNormalized ? '정규화된 가격 추이 (첫날 = 100)' : '가격 추이',
+                                font: {
+                                    size: 16,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: {
+                                    tooltipFormat: 'yyyy-MM-dd',
+                                    unit: getTimeUnit(allData[symbols[0]].dates)
+                                },
+                                title: {
+                                    display: true,
+                                    text: '날짜'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: useNormalized ? '정규화된 가격 (첫날 = 100)' : '가격'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 원본 가격 차트 표시
+            function showRawPrices() {
+                document.getElementById('rawPriceBtn').className = 'bg-blue-600 text-white px-3 py-1 rounded-md text-sm';
+                document.getElementById('normalizedPriceBtn').className = 'bg-gray-200 text-gray-700 px-3 py-1 rounded-md text-sm';
+                createPriceChart(false);
+            }
+            
+            // 정규화된 가격 차트 표시
+            function showNormalizedPrices() {
+                document.getElementById('rawPriceBtn').className = 'bg-gray-200 text-gray-700 px-3 py-1 rounded-md text-sm';
+                document.getElementById('normalizedPriceBtn').className = 'bg-blue-600 text-white px-3 py-1 rounded-md text-sm';
+                createPriceChart(true);
+            }
+            
+            // 상관관계 행렬 생성
+            function createCorrelationMatrix() {
+                const ctx = document.getElementById('correlationMatrix').getContext('2d');
+                
+                if (chartInstances.correlation) {
+                    chartInstances.correlation.destroy();
+                }
+                
+                const symbols = Object.keys(allData).filter(key => key !== 'correlationMatrix');
+                const matrix = allData.correlationMatrix;
+                
+                // 데이터 포인트 생성
+                const data = [];
+                const labels = [];
+                
+                symbols.forEach((symbol, i) => {
+                    labels.push(indicatorColors[symbol].name);
+                    
+                    symbols.forEach((_, j) => {
+                        data.push({
+                            x: j,
+                            y: i,
+                            v: matrix[i][j]
+                        });
+                    });
+                });
+                
+                // 상관관계 행렬 차트 생성
+                chartInstances.correlation = new Chart(ctx, {
+                    type: 'matrix',
+                    data: {
+                        datasets: [{
+                            label: '상관계수',
+                            data: data,
+                            backgroundColor(context) {
+                                const value = context.dataset.data[context.dataIndex].v;
+                                let alpha = Math.abs(value);
+                                let r, g, b;
+                                
+                                if (value >= 0) {
+                                    // 양의 상관관계: 파란색 계열
+                                    r = 0;
+                                    g = 0;
+                                    b = 255;
+                                } else {
+                                    // 음의 상관관계: 빨간색 계열
+                                    r = 255;
+                                    g = 0;
+                                    b = 0;
+                                }
+                                
+                                return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                            },
+                            borderColor: 'white',
+                            borderWidth: 1,
+                            width: ({ chart }) => (chart.chartArea || {}).width / symbols.length - 1,
+                            height: ({ chart }) => (chart.chartArea || {}).height / symbols.length - 1
+                        }]
+                    },
+                    options: {
+                        animation: false, // 성능 최적화
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    title() {
+                                        return '';
+                                    },
+                                    label(context) {
+                                        const v = context.dataset.data[context.dataIndex];
+                                        return [
+                                            `${labels[v.y]} 와 ${labels[v.x]}`,
+                                            `상관계수: ${v.v.toFixed(2)}`
+                                        ];
+                                    }
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '지표간 상관관계 행렬',
+                                font: {
+                                    size: 16,
+                                    weight: 'bold'
+                                }
+                            },
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'category',
+                                labels: labels,
+                                offset: true,
+                                ticks: {
+                                    maxRotation: 90,
+                                    minRotation: 45
+                                },
+                                grid: {
+                                    display: false
+                                }
+                            },
+                            y: {
+                                type: 'category',
+                                labels: labels,
+                                offset: true,
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 수익률 차트 생성
+            function createReturnsChart() {
+                const ctx = document.getElementById('returnsChart').getContext('2d');
+                
+                if (chartInstances.returns) {
+                    chartInstances.returns.destroy();
+                }
+                
+                const symbols = Object.keys(allData).filter(key => key !== 'correlationMatrix');
+                const datasets = [];
+                
+                // 각 심볼에 대한 일별 수익률 데이터셋 생성 (최대 300개 포인트 샘플링)
+                for (const symbol of symbols) {
+                    const returns = allData[symbol].returns;
+                    const dates = allData[symbol].dates.slice(1); // 첫 날은 수익률 계산 불가
+                    
+                    // 데이터 포인트 샘플링 (성능 최적화)
+                    const step = Math.ceil(returns.length / 300);
+                    const sampledData = [];
+                    
+                    for (let i = 0; i < returns.length; i += step) {
+                        sampledData.push({
+                            x: dates[i],
+                            y: returns[i] * 100 // 퍼센트로 변환
+                        });
+                    }
+                    
+                    datasets.push({
+                        label: indicatorColors[symbol].name,
+                        data: sampledData,
+                        borderColor: indicatorColors[symbol].color,
+                        backgroundColor: 'rgba(0, 0, 0, 0)',
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        pointHoverRadius: 3
+                    });
+                }
+                
+                chartInstances.returns = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: datasets
+                    },
+                    options: {
+                        animation: false, // 성능 최적화
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        plugins: {
+                            tooltip: {
+                                enabled: true,
+                                mode: 'index',
+                                intersect: false
+                            },
+                            title: {
+                                display: true,
+                                text: '일별 수익률 변화',
+                                font: {
+                                    size: 16,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: {
+                                    tooltipFormat: 'yyyy-MM-dd',
+                                    
